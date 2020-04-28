@@ -22,6 +22,9 @@ library(gganimate)
 library(transformr)
 library(tweenr)
 library(spData)
+library(tibble)
+library(forcats)
+
 
 options(mc.cores=parallel::detectCores())
 ```
@@ -40,12 +43,12 @@ df <- data.frame(year=integer(),
 long=double(),
 lat=double(),
 change_in_temp=double())
-ref_tbl <- read.table('raw-data/temp_data/air_temp.1990') %>%
+ref_tbl <- read.table('raw-data/temp_data/air_temp.1900') %>%
    rename("long" = V1, "lat" = V2) %>%
    mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
-          /12,
-          year = 1990) %>%
-   dplyr::select(long, lat, mean_yearly_temp, year)
+          /12) %>%
+   dplyr::select(long, lat, mean_yearly_temp)
+write_csv(ref_tbl, 'final_project_shiny/ref_tbl.csv')
 my_seq <- seq(from = 1995, to = 2010, by = 5)
 for (i in my_seq){
   tbl <- read.table(paste('raw-data/temp_data/air_temp.', i ,sep ='')) %>% 
@@ -74,7 +77,7 @@ y2014 <- read.table('raw-data/temp_data/air_temp.2014') %>%
   dplyr::select(long, lat, mean_yearly_temp)
 
 
- y1991 <- read.table('raw-data/temp_data/air_temp.1991') %>%
+ y1910 <- read.table('raw-data/temp_data/air_temp.1910') %>%
    rename("long" = V1, "lat" = V2) %>%
    mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
           /12) %>%
@@ -83,32 +86,45 @@ y2014 <- read.table('raw-data/temp_data/air_temp.2014') %>%
  c2014 <- y2014 %>% 
   inner_join(ref_tbl, by = c("long", "lat")) %>% 
   mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y)
+ 
+  c1910 <- y1910 %>% 
+  inner_join(ref_tbl, by = c("long", "lat")) %>% 
+  mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y)
 ```
 ```{r}
-c2000 <- read.table('raw-data/temp_data/air_temp.2000') %>%
- rename("long" = V1, "lat" = V2) %>%
- mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
-        /12,
-        year = 2000) %>%
- dplyr::select(long, lat, mean_yearly_temp) %>% 
- inner_join(ref_tbl, by = c("long", "lat")) %>% 
- mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y)
-
-
+change <- function(year) { 
+  read.table(paste('raw-data/temp_data/air_temp.', year, sep='')) %>%
+   rename("long" = V1, "lat" = V2) %>%
+   mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
+          /12) %>%
+   dplyr::select(long, lat, mean_yearly_temp) %>% 
+   inner_join(ref_tbl, by = c("long", "lat")) %>% 
+   mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y) 
+}
+change(2010)
+```
+```{r}
 #SHP <- shapefile("ne_110m_admin_0_boundary_lines_land.shp")
-ind_shp <- read_sf("Lat_Long/Lat_Long.shp")
 
-locate_sf <-  st_as_sf(c2000, coords = c("long", "lat"), crs = 4326)
+plot = function (year){
+  ind_shp <- read_sf("Lat_Long/Lat_Long.shp")
+  data <- change(year)
+  locate_sf <-  st_as_sf(data, coords = c("long", "lat"), crs = 4326)
+  
+  ggplot(data = ind_shp) +
+    geom_sf() +
+    geom_sf(data = locate_sf, aes(color = change_in_temp)) +
+    theme_map() +
+    labs(color = "Change in Temperature", title = paste("Year ", year, "Compared to Year 1900")) +
+    scale_color_gradient(low = "yellow", high = "red", limits = c(-10,10))
+}
 
-temp <- sample_n(df, 5, replace =TRUE)
- 
-plot = ggplot(data = ind_shp) +
-  geom_sf() +
-  geom_sf(data = locate_sf, aes(color = change_in_temp)) +
-  theme_map() +
-  labs(color = "Change in Temperature", title = "Year 1910 Compared to Year 1900")
-plot
-write_rds(plot, "final_project_shiny/map_1910.rds")
+# plot_1930 <- plot(2000)
+# plot_1930
+
+plot_year <- plot(2014)
+ggsave(plot_year, file = paste("final_project_shiny/maps/map2014.jpeg"))
+
 
 ```
 
@@ -131,13 +147,38 @@ ggplot(data = ind_shp) +
 
 
 ```
-```{r}
-co2_data <- read_excel('raw-data/co2.xls', skip = 3) %>%
-  clean_names() %>%
-  filter(! is.na (country_name))
-  
 
+```{r}
+sequence = seq(from=1900, to=2014,by = 1)
+temps <- c()
+for (year in sequence){
+   yearly_temp<-read.table(paste('raw-data/temp_data/air_temp.', year, sep='')) %>%
+     rename("long" = V1, "lat" = V2) %>%
+     mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14) /12) %>%
+     select(long, lat, mean_yearly_temp) %>% 
+     summarise(avg = mean(mean_yearly_temp)) %>%
+     pull(avg)
+   temps <- append(temps,yearly_temp)
+}     
+    
+length(temps )
+
+co2_temp <- co2_pivoted %>% 
+  group_by(year) %>%
+  summarise(emissions = mean(emissions_per_capita)) %>%
+  mutate(temps = temps[61:115])
+co2_temp
+
+
+co2_temp_plot <- co2_temp %>%
+  ggplot(aes(emissions, temps)) +
+  geom_point() +
+  theme_classic() +
+  geom_smooth(method = lm, se=FALSE) +
+  labs(title = "Effect of CO2 emissions on Global Temperatures", x = "CO2 Emissions(metrics tons per capita", y = "Mean Annual Temperatures")
+write_rds(co2_temp_plot, "final_project_shiny/co2_temp_plot.rds")
 ```
+
 
 ```{r}
 forest <- read_excel("raw-data/forestArea.xls", skip = 2) %>%
@@ -179,28 +220,6 @@ oil_pivoted <- oil %>%
   # I learned that you can remove specific prefix from the name of the column by
   # using names_prefix
   
-  pivot_longer(starts_with("x"), names_to = "year", names_prefix = "x", values_to = "forest_area") %>%
-  
-  select(country_name, country_code, indicator_name, `year`, `forest_area`) %>%
-  
-  # I arrange by country_name because I want to replicate the order of the rows
-  # shown in the exam document file.
-  
-  arrange(country_name) %>%
-  
-  
-  # the reason I convert year to double type is because in the paris table, the
-  # year is type double and in order to join the tables by year, the year needs
-  # to be of the same type.
-  
-  mutate(year = as.double(year)) %>% 
-  filter(!is.na(forest_area)) 
-
-forest_pivoted <- forest %>%
-  
-  # I learned that you can remove specific prefix from the name of the column by
-  # using names_prefix
-  
   pivot_longer(starts_with("x"), names_to = "year", names_prefix = "x", values_to = "energy_use") %>%
   
   select(country_name, country_code, indicator_name, `year`, `energy_use`) %>%
@@ -218,6 +237,28 @@ forest_pivoted <- forest %>%
   mutate(year = as.double(year)) %>% 
   filter(!is.na(energy_use)) 
 
+forest_pivoted <- forest %>%
+  
+  # I learned that you can remove specific prefix from the name of the column by
+  # using names_prefix
+  
+  pivot_longer(starts_with("x"), names_to = "year", names_prefix = "x", values_to = "forest_area") %>%
+  
+  select(country_name, country_code, indicator_name, `year`, `forest_area`) %>%
+  
+  # I arrange by country_name because I want to replicate the order of the rows
+  # shown in the exam document file.
+  
+  arrange(country_name) %>%
+  
+  
+  # the reason I convert year to double type is because in the paris table, the
+  # year is type double and in order to join the tables by year, the year needs
+  # to be of the same type.
+  
+  mutate(year = as.double(year)) %>% 
+  filter(!is.na(forest_area)) 
+
 ```
 
 ```{r}
@@ -225,9 +266,10 @@ joined_tbl <- co2_pivoted %>%
   inner_join(oil_pivoted, by = c("year", "country_code", "country_name")) %>% 
   filter(! is.na(energy_use) & ! is.na(emissions_per_capita))
 
+write_rds(joined_tbl, 'final_project_shiny/C02_Emissions_And_OIL.rds')
 joined_tbl1 <- co2_pivoted %>% 
   inner_join(forest_pivoted, by = c("year", "country_code", "country_name")) %>% 
-  filter(! is.na(energy_use) & ! is.na(emissions_per_capita))
+  filter(! is.na(forest_area) & ! is.na(emissions_per_capita))
 ```
 
 ```{r}
@@ -241,14 +283,27 @@ for (i in my_seq){
     dplyr::select(long, lat, mean_yearly_temp, year)
 } 
 
-co2_and_temp <- 
-
 
 ```
 
 ```{r plots}
+country_names
+
+for (country in country_names){
+      plt <- joined_tbl %>%
+               filter(country_name == input$country) %>% 
+               ggplot(aes(x = energy_use, 
+                          y = emissions_per_capita)) +
+               geom_point() 
+               theme_classic() +
+               labs(title = "Change in CO2 Emissions with Rising Oil Consumption",
+                            x = "Energy Use(kg of oil equivalent per capita)",
+                            y = "Emissions of CO2(metric tons per capita)"
+                       )
+
+}
 plot1 <- joined_tbl %>% 
-  filter(country_code == "ARE") %>% 
+  filter(country_name == "Albania") %>% 
   ggplot(aes(x = energy_use, y = emissions_per_capita, color = country_code)) +
 geom_point() +
   theme_classic() + 
@@ -257,18 +312,24 @@ geom_point() +
 plot1
 
 
-plot2 <- joined_tbl %>% 
-  ggplot(aes(x = energy_use, y = emissions_per_capita)) +
+plot2 <- joined_tbl %>%
+  mutate(energy_use_log = log(energy_use)) %>%
+  ggplot(aes(x = energy_use_log, y = log(emissions_per_capita))) +
 geom_jitter(alpha = 0.2) +
   theme_classic() +
   geom_smooth(method = "lm", se = FALSE)
 plot2
 
-plot3 <- joined_tbl1 %>% 
-  ggplot(aes(x = forest_area, y = emissions_per_capita)) +
-  geom_jitter()
+country_names <- co2 %>%
+  pull(country_name)
+write_rds(country_names, "final_project_shiny/country_names.rds")
 
-plot3
+# plot3 <- joined_tbl1 %>% 
+#   ggplot(aes(x = log(forest_area), y = (emissions_per_capita))) +
+#   theme_classic() +
+#   geom_histogram(binwidth=10 )
+# ?geom_histogram
+# plot3
 
 ```
 ```{r plot, include=FALSE}
