@@ -13,7 +13,7 @@ library(DT)
 # import needed files(mostly plots and tables) for the app
 
 CO2Plot <- read_rds("co2_temp_plot.rds")
-forestPlot <- read_rds("forest_temp_plot.rds")
+forestPlot <- read_rds("forest_area_temp_plot.rds")
 emissions_and_oil_consumption <- read_rds("C02_Emissions_And_OIL.rds")
 country_names <- read_rds("country_names.rds")
 climate_change_plot <- read_rds("climate_change_plt.rds")
