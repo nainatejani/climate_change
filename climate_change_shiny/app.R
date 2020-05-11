@@ -6,6 +6,7 @@ library(tidyverse)
 library(ggplot2)
 library(ggthemes)
 library(DT)
+library(shinyjs)
 
 
 # load necessary dependencies
@@ -59,18 +60,14 @@ ui <- fluidPage(theme = shinytheme("sandstone"),
                                     br(),
                                     # I could have had a slider instead of a radio button. This was supposed to 
                                     # be temporary. However, I ran out of time for doing this.
-                                    
-                                    sidebarPanel(radioButtons(inputId = "heat_year",
-                                                              label = "Select a decade:",
-                                                              choices = c("1910","1920","1930","1940",
-                                                                          "1950","1960","1970","1980",
-                                                                          "1990","2000","2010","2014"))
-                                    ),
-                                    mainPanel(imageOutput("heatmap")),
-                                    p("Each of the heap maps is a result of plotting temperatures 
-                for each longitude and latitude in a year. Each annual temperature for each 
+                                    sliderInput("heat_year", "Select a Year", value = 50, min = 1910, max = 2014, step = 10),
+
+                                    mainPanel(p("Each of the heap maps is a result of plotting temperatures
+                for each longitude and latitude in a year. Each annual temperature for each
                 longitude and latitude was calculated by finding the average of the monthly temperatures
-                for the year")
+                for the year."),
+                                    imageOutput("heatmap"))
+                                    
                            ),
                            tabPanel("What Causes It?",
                                     tabsetPanel(
@@ -110,7 +107,7 @@ ui <- fluidPage(theme = shinytheme("sandstone"),
                            ),
                            tabPanel("About",
                                     mainPanel(
-                                      h3("Climate Change: !"),
+                                      h3("It's not a myth: Climate Change and Correlated Factors"),
                                       p("In this project, the first goal is make it visually clear through a series
                   of time intervals that climate change is a reality. Second, I analyze several
                   factors that may, directly or indirectly be associated with climate change"),
@@ -128,23 +125,25 @@ ui <- fluidPage(theme = shinytheme("sandstone"),
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
-  
-  
+  # output$heatmap <- renderPlot({
+  #   Map2014
+  # })
+
   output$heatmap <- renderImage({
     width  <- session$clientData$output_heatmap_width
     height <- session$clientData$output_heatmap_height
-    
+
     pixelratio <- session$clientData$pixelratio
-    
+
     filename <- normalizePath(file.path('./maps',
                                         paste('map', input$heat_year, '.jpeg', sep='')))
     # Return a list containing the filename and alt text
     list(src = filename,
          alt = paste("Image number", input$heat_year),
-         height = height+200,
-         width = width)
+         height = 600,
+         width = 700)
   }, deleteFile = FALSE)
-  
+   
   output$CO2plot <- renderPlot({
     CO2Plot
   })
@@ -158,9 +157,11 @@ server <- function(input, output, session) {
   output$climate_change_plot <- renderPlot({
     climate_change_plot
   })
+  
   output$forestPlot <- renderPlot({
     forestPlot
   })
+  
   output$countrywisePlot <- renderPlot({
     country <- input$country
     data <- emissions_and_oil_consumption %>%
@@ -169,13 +170,10 @@ server <- function(input, output, session) {
       geom_point(color = 'red') +
       geom_smooth(method = 'lm', se = FALSE) +
       theme_classic() +
-      
       labs(title = "Change in CO2 Emissions with Rising Oil Consumption",
            x = "Energy Use(kg of oil equivalent per capita)",
            y = "Emissions of CO2(metric tons per capita)"
       )
-    
-    
   })
   
   

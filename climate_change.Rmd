@@ -1,5 +1,5 @@
 ---
-title: "final_project"
+title: "climate_change"
 author: "Naina Tejani"
 date: "4/21/2020"
 output: html_document
@@ -24,12 +24,15 @@ library(tweenr)
 library(spData)
 library(tibble)
 library(forcats)
-
+library(httr)
+library(broom)
+library(gt)
 
 options(mc.cores=parallel::detectCores())
 ```
-```{r cache=TRUE}
+```{r fetching_data, cache=TRUE}
 # Get the data directory from readtext
+# the following code is commented since I only needed to run it once.
 #DATA_DIR <- system.file("extdata/", package = "readtext")
 
 #fn <- "http://climate.geog.udel.edu/~climate/html_pages/Global2014/air_temp_2014.tar.gz"
@@ -38,149 +41,7 @@ options(mc.cores=parallel::detectCores())
 
 ```
 
-```{r}
-df <- data.frame(year=integer(),
-long=double(),
-lat=double(),
-change_in_temp=double())
-ref_tbl <- read.table('raw-data/temp_data/air_temp.1900') %>%
-   rename("long" = V1, "lat" = V2) %>%
-   mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
-          /12) %>%
-   dplyr::select(long, lat, mean_yearly_temp)
-write_csv(ref_tbl, 'final_project_shiny/ref_tbl.csv')
-my_seq <- seq(from = 1995, to = 2010, by = 5)
-for (i in my_seq){
-  tbl <- read.table(paste('raw-data/temp_data/air_temp.', i ,sep ='')) %>% 
-    rename("long" = V1, "lat" = V2) %>% 
-    mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
-         /12, 
-         year = i) %>% 
-    dplyr::select(long, lat, mean_yearly_temp, year)
-  
-  change_in_temp <- ref_tbl %>% 
-    inner_join(tbl, by = c("long", "lat")) %>% 
-    mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y,
-           year = year.y) %>% 
-    select(long, lat, change_in_temp, year)
-   
-  ref_tbl <- tbl
-  df <- rbind(df, change_in_temp)
-}
-write_csv(df, "df.csv")
-
-
-y2014 <- read.table('raw-data/temp_data/air_temp.2014') %>%
-  rename("long" = V1, "lat" = V2) %>%
-  mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)/12,
-         year = 2014) %>%
-  dplyr::select(long, lat, mean_yearly_temp)
-
-
- y1910 <- read.table('raw-data/temp_data/air_temp.1910') %>%
-   rename("long" = V1, "lat" = V2) %>%
-   mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
-          /12) %>%
-   dplyr::select(long, lat, mean_yearly_temp)
- 
- c2014 <- y2014 %>% 
-  inner_join(ref_tbl, by = c("long", "lat")) %>% 
-  mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y)
- 
-  c1910 <- y1910 %>% 
-  inner_join(ref_tbl, by = c("long", "lat")) %>% 
-  mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y)
-```
-```{r}
-change <- function(year) { 
-  read.table(paste('raw-data/temp_data/air_temp.', year, sep='')) %>%
-   rename("long" = V1, "lat" = V2) %>%
-   mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
-          /12) %>%
-   dplyr::select(long, lat, mean_yearly_temp) %>% 
-   inner_join(ref_tbl, by = c("long", "lat")) %>% 
-   mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y) 
-}
-change(2010)
-```
-```{r}
-#SHP <- shapefile("ne_110m_admin_0_boundary_lines_land.shp")
-
-plot = function (year){
-  ind_shp <- read_sf("Lat_Long/Lat_Long.shp")
-  data <- change(year)
-  locate_sf <-  st_as_sf(data, coords = c("long", "lat"), crs = 4326)
-  
-  ggplot(data = ind_shp) +
-    geom_sf() +
-    geom_sf(data = locate_sf, aes(color = change_in_temp)) +
-    theme_map() +
-    labs(color = "Change in Temperature", title = paste("Year ", year, "Compared to Year 1900")) +
-    scale_color_gradient(low = "yellow", high = "red", limits = c(-10,10))
-}
-
-# plot_1930 <- plot(2000)
-# plot_1930
-
-plot_year <- plot(2014)
-ggsave(plot_year, file = paste("final_project_shiny/maps/map2014.jpeg"))
-
-
-```
-
-```{r}
-#SHP <- shapefile("ne_110m_admin_0_boundary_lines_land.shp")
-ind_shp <- read_sf("TM_WORLD_BORDERS-0.3/TM_WORLD_BORDERS-0.3.shp")
-
-locate_sf <-  st_as_sf(temp, coords = c("long", "lat"), crs = 4326)
-
-temp <- sample_n(df, 5, replace =TRUE)
-# temp$year <- year(temp$year)
-df <- read_csv("df.csv") 
-rm(df)
-ggplot(data = ind_shp) +
-  geom_sf() +
-  geom_sf(data = locate_sf, aes(color = change_in_temp)) +
-  transition_time(year) +
-  theme_map() +
-  labs(color = "temperature", subtitle = "Year {frame_time}", title = "Heat Maps")
-
-
-```
-
-```{r}
-sequence = seq(from=1900, to=2014,by = 1)
-temps <- c()
-for (year in sequence){
-   yearly_temp<-read.table(paste('raw-data/temp_data/air_temp.', year, sep='')) %>%
-     rename("long" = V1, "lat" = V2) %>%
-     mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14) /12) %>%
-     select(long, lat, mean_yearly_temp) %>% 
-     summarise(avg = mean(mean_yearly_temp)) %>%
-     pull(avg)
-   temps <- append(temps,yearly_temp)
-}     
-    
-length(temps )
-
-co2_temp <- co2_pivoted %>% 
-  group_by(year) %>%
-  summarise(emissions = mean(emissions_per_capita)) %>%
-  mutate(temps = temps[61:115])
-co2_temp
-
-
-co2_temp_plot <- co2_temp %>%
-  ggplot(aes(emissions, temps)) +
-  geom_point() +
-  theme_classic() +
-  geom_smooth(method = lm, se=FALSE) +
-  labs(title = "Effect of CO2 emissions on Global Temperatures", x = "CO2 Emissions(metrics tons per capita", y = "Mean Annual Temperatures")
-write_rds(co2_temp_plot, "final_project_shiny/co2_temp_plot.rds")
-```
-
-
-```{r}
+```{r cleaning_data, include=FALSE}
 forest <- read_excel("raw-data/forestArea.xls", skip = 2) %>%
   clean_names() %>%
   filter(! is.na (country_name))
@@ -191,7 +52,7 @@ oil <- read_excel("raw-data/oilConsumption.xls", skip = 2) %>%
   clean_names() %>%
   filter(! is.na (country_name))
 ```
-```{r, echo=FALSE}
+```{r wrangling_data,include=FALSE}
 
 co2_pivoted <- co2 %>%
   
@@ -261,7 +122,230 @@ forest_pivoted <- forest %>%
 
 ```
 
-```{r}
+
+```{r create_dataframe_for_all_temperatures, include=FALSE}
+
+# Creating my data frame called df with values of temperature for all 114 years,
+# for each longitude and latitude.
+
+df <- data.frame(year=integer(),
+long=double(),
+lat=double(),
+change_in_temp=double()) 
+
+
+# The following code inserts all temperature values into my initialized
+# dataframe called df.
+
+# This was a fun function to write about. I learnt how to use rbind. I also
+# learnt how to read txt files which do not necessarily end with a .txt or
+# really any conventional extension. Moreover, I realized that sometimes various
+# packages may have the same functions and that may interfere with the workings
+# of the functions, which is why below I had to specify dplyr for the filter
+# method.
+
+# The reference table is the data frame which I am comparing all other temperatures to. It depends on the previous year calculated.
+ref_tbl <- read.table('raw-data/temp_data/air_temp.1900')
+my_seq <- seq(from = 1910, to = 2014, by = 1)
+for (i in my_seq){
+  tbl <- read.table(paste('raw-data/temp_data/air_temp.', i ,sep ='')) %>% 
+    rename("long" = V1, "lat" = V2) %>% 
+    mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
+         /12, 
+         year = i) %>% 
+    dplyr::select(long, lat, mean_yearly_temp, year)
+  
+  change_in_temp <- ref_tbl %>% 
+    inner_join(tbl, by = c("long", "lat")) %>% 
+    mutate(change_in_temp = mean_yearly_temp.x - mean_yearly_temp.y,
+           year = year.y) %>% 
+    select(long, lat, change_in_temp, year)
+   
+  ref_tbl <- tbl
+  df <- rbind(df, change_in_temp)
+}
+
+# I actually did not end up using this df table since it was essentially to
+# create animations which did not work out.
+
+```
+
+```{r year_temperatures, include=FALSE}
+# This essentially computes the temperatures at each longtiude and longitude for
+# a given year. As can be seen, it takes the average of 12 monthly temperature
+# averages.
+
+year_temperatures <- function(year){
+  read.table(paste('raw-data/temp_data/air_temp.', year, sep = '')) %>%
+   rename("long" = V1, "lat" = V2) %>%
+   mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
+          /12) %>%
+   dplyr::select(long, lat, mean_yearly_temp)
+}
+year_temperatures(1900)
+
+```
+```{r change_of_temp_between_2_years, include=FALSE}
+# This function computes the change in temperatures between two years.
+
+change <- function(year, ref_year) { 
+  read.table(paste('raw-data/temp_data/air_temp.', year, sep='')) %>%
+   rename("long" = V1, "lat" = V2) %>%
+   mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
+          /12) %>%
+   dplyr::select(long, lat, mean_yearly_temp) %>% 
+   inner_join(year_temperatures(ref_year), by = c("long", "lat")) %>% 
+   mutate(change_in_temp = ifelse(mean_yearly_temp.x - mean_yearly_temp.y > 5.0, 5.0,
+                                  ifelse(mean_yearly_temp.x - mean_yearly_temp.y < -5.0,
+                                         -5.0, mean_yearly_temp.x - mean_yearly_temp.y))
+          ) 
+}
+
+```
+```{r plot_change_between_two_years, include=FALSE}
+
+# I had to do significant trial and error with the maps. My most important
+# decision was whether to compare each decade with 1900, or compare each decade
+# with the once preceding it. I enetually decided to compare each decade with
+# 1900 because my primary goal is to show an incremental change in temperature.
+
+plot = function (year){
+  shp <- read_sf("Lat_Long/Lat_Long.shp")
+  data <- change(year, 1900)
+  locate_sf <-  st_as_sf(data, coords = c("long", "lat"), crs = 4326)
+  
+  ggplot(data = shp) +
+    geom_sf() +
+    geom_sf(data = locate_sf, aes(color = change_in_temp)) +
+    theme_map() +
+    labs(color = "Change in Temperature", title = paste("Year ", year, "Compared to Year 1900")) +
+    scale_color_gradient(low = "yellow", high = "red", limits = c(-5,5))
+}
+# I used the above plot function to create all my maps which we see in the heat visualizations. To create a plot and save it, i use the following code
+
+plot_year = plot(2014)
+ggsave(plot_year, file = paste("climate_change_shiny/maps1/map2014.jpeg"))
+
+
+```
+
+```{r attempt_at_animations, include=FALSE}
+# I tried to run the following code for animations. However, the code was too
+# slow. Even after leaving overnight for 10 hours did not produce the animation.
+# I would love to figure this out.
+
+shp <- read_sf("Lat_Long/Lat_Long.shp")
+locate_sf <-  st_as_sf(df, coords = c("long", "lat"), crs = 4326) %>%
+  select(change_in_temp, year, geometry)
+ggplot(ind_shp) +
+  geom_sf() +
+  geom_sf(data = locate_sf, aes(color = change_in_temp)) +
+  theme_map() +
+  transition_time(year) +
+  labs(color = "temperature", subtitle = "Year {frame_time}", title = "Heat Maps")+
+  scale_color_gradient(low = "yellow", high = "red")
+
+```
+
+```{r temeprature_change_with_time, include=FALSE}
+sequence = seq(from=1900, to=2014,by = 1)
+
+# I create a list of all mean yearly temperatures in the for loop below.
+
+temps <- c()
+for (year in sequence){
+   yearly_temp<-read.table(paste('raw-data/temp_data/air_temp.', year, sep='')) %>%
+     rename("long" = V1, "lat" = V2) %>%
+     mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14) /12) %>%
+     select(long, lat, mean_yearly_temp) %>% 
+     summarise(avg = mean(mean_yearly_temp)) %>%
+     pull(avg)
+   temps <- append(temps,yearly_temp)
+}     
+    
+# I create a new tibble to show the progression of temperature change with time.
+years_and_temp <- tibble(year = 1900:2014,
+                         temp = temps)
+
+```
+```{r creating_temp_with_time_plot, include=FALSE}
+climate_change_plot <- years_and_temp %>%
+  ggplot(aes(year,temp)) +
+  geom_point(color = "red") +
+  geom_smooth(method = 'lm', se=FALSE) +
+  theme_classic() +
+  labs("Climate Change Over The Past Century", x = "Year", y = "Annual Mean Temperature")
+write_rds(climate_change_plot, "final_project_shiny/climate_change_plt.rds")
+climate_change_plot
+```
+```{r regression_and_plots_for_co2_and_forest_area, include=FALSE}
+# I first create the suitable table linknig co2 and temperature. I make sure to
+# only account for years where I have values for both.
+
+# I log the co2 emissions since the data is concentrated on the right and hence
+# a straight line does not do justice to the rekation.
+
+co2_temp <- co2_pivoted %>% 
+  group_by(year) %>%
+  summarise(emissions = log(mean(emissions_per_capita)))%>%
+  mutate(temps = temps[61:115]) 
+
+# I then create a plot showing how co2 emissions are correlated with high temperatures.
+
+co2_temp_plot <- co2_temp %>%
+  ggplot(aes(emissions, temps)) +
+  geom_point() +
+  theme_classic() +
+  geom_smooth(method = lm, se=FALSE) +
+  labs(title = "Effect of CO2 emissions on Global Temperatures", x = "CO2 Emissions(metrics tons per capita)", y = "Mean Annual Temperatures", subtitle = "Emissions has been logged")
+co2_temp_plot
+
+# I then run a regression to explore the relationship further.
+regression_co2 <- co2_temp %>% 
+  lm(temps ~ emissions, data = .) %>% 
+  tidy(conf.int=TRUE) %>% 
+  select(term, estimate,conf.low, conf.high ) %>% 
+  mutate(estimate = round(estimate, 3), conf.low = round(conf.low, 2),conf.high = round(conf.high, 2)) %>% 
+  rename("Term" = "term", "Estimate" = "estimate","Lower Bound" = "conf.low", "Upper Bound" = "conf.high") %>% 
+
+regression_co2
+write_rds(regression_co2, "climate_change/regression_co2.rds")
+
+# I repeat the same steps for forest data.
+forest_area_temp <- forest_pivoted %>% 
+  group_by(year) %>% 
+  summarise(forest_area = log(mean(forest_area))) %>%
+  filter(year <= 2014) %>% 
+  mutate(temps = temps[91:115])
+forest_area_temp
+
+forest_temp_plot <- forest_area_temp %>%
+  ggplot(aes(forest_area, temps)) +
+  geom_point() +
+  theme_classic() +
+  geom_smooth(method = lm, se=FALSE) +
+  labs(title = "Effect of Forest Area on Global Temperatures", x = "Forest Area(square km)", y = "Mean Annual Temperatures", subtitle = "The data ranges from year 1990 to 2016")
+forest_temp_plot
+write_rds(forest_temp_plot, "climate_change/forest_temp_plot.rds")
+
+regression_forest_area <- forest_area_temp %>% 
+  lm(temps ~ forest_area, data = .) %>% 
+  tidy(conf.int=TRUE) %>% 
+  select(term, estimate,conf.low, conf.high ) %>% 
+  mutate(estimate = round(estimate, 3), conf.low = round(conf.low, 2),conf.high = round(conf.high, 2)) %>% 
+  rename("Term" = "term", "Estimate" = "estimate","Lower Bound" = "conf.low", "Upper Bound" = "conf.high")
+
+forest_area_temp %>% 
+  summarise(coef = cor(forest_area, temps)) %>% 
+  pull(coef)
+regression_forest_area
+
+  
+```
+
+
+
+```{r comparing_co2_emissions_with_energy_consumptions,include=FALSE}
 joined_tbl <- co2_pivoted %>% 
   inner_join(oil_pivoted, by = c("year", "country_code", "country_name")) %>% 
   filter(! is.na(energy_use) & ! is.na(emissions_per_capita))
@@ -272,21 +356,10 @@ joined_tbl1 <- co2_pivoted %>%
   filter(! is.na(forest_area) & ! is.na(emissions_per_capita))
 ```
 
-```{r}
-my_seq <- seq(from = 1900, to = 2014, by = 1)
-for (i in my_seq){
-  tbl <- read.table(paste('raw-data/temp_data/air_temp.', i ,sep ='')) %>% 
-    mutate(mean_yearly_temp = (V3+V4+V5+V6+V7+V8+V9+V10+V11+V12+V13+V14)
-         /12) %>% 
-    summarise(avg = mean(mean_yearly_temp)) %>%
-    
-    dplyr::select(long, lat, mean_yearly_temp, year)
-} 
 
+```{r testing_plots}
 
-```
-
-```{r plots}
+# This section is for me anaylzing the relationships and testing correlations.
 country_names
 
 for (country in country_names){
@@ -296,10 +369,11 @@ for (country in country_names){
                           y = emissions_per_capita)) +
                geom_point() 
                theme_classic() +
-               labs(title = "Change in CO2 Emissions with Rising Oil Consumption",
+               labs(title = paste("Change in CO2 Emissions with Rising Oil Consumption  For ", country, sep = ''),
                             x = "Energy Use(kg of oil equivalent per capita)",
                             y = "Emissions of CO2(metric tons per capita)"
                        )
+      write_rds(plt, paste('final_project_shiny/plots/plot',country, ".rds",sep =''))
 
 }
 plot1 <- joined_tbl %>% 
@@ -320,8 +394,11 @@ geom_jitter(alpha = 0.2) +
   geom_smooth(method = "lm", se = FALSE)
 plot2
 
-country_names <- co2 %>%
-  pull(country_name)
+country_names <- joined_tbl %>%
+  pull(country_name) %>%
+  unique()
+country_names 
+
 write_rds(country_names, "final_project_shiny/country_names.rds")
 
 # plot3 <- joined_tbl1 %>% 
@@ -332,9 +409,4 @@ write_rds(country_names, "final_project_shiny/country_names.rds")
 # plot3
 
 ```
-```{r plot, include=FALSE}
-ggsave(plot1, file = "graphics/plot1.png", scale = .4)
-```
-
-
 
